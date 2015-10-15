@@ -1,18 +1,22 @@
 defmodule Batcher do
   use GenServer
+  require Logger
 
-  def start_link(args \\ []) do
+  def start_link(args \\ [], opts) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
   end
 
   def init(opts) do
+#    IO.inspect opts
     state = Enum.into(opts, %{backlog: [], timeout: 1000, limit: 1000})
-    # IO.inspect state
+#    IO.inspect state
 
     :erlang.send_after(state.timeout, __MODULE__, :trigger)
 
     {:ok, state}
   end
+
+#  def init(args), do: IO.inspect args; "Batcher needs to be started with an action: `Batcher.start_link(action: action)`"
 
   def append(command) do
     GenServer.cast(__MODULE__, {:append, command})
@@ -25,7 +29,7 @@ defmodule Batcher do
   def handle_cast({:append, command}, %{limit: limit, backlog: backlog, action: action} = state) do
     backlog = [ command | backlog ]
     if Enum.count(backlog) == limit do
-      # IO.puts "trigger limit #{limit}"
+      Logger.debug "flushing #{Enum.count(backlog)} commands after limit #{limit}"
       action.(backlog)
       backlog = []
     end
@@ -37,8 +41,11 @@ defmodule Batcher do
   end
 
   def handle_info(:trigger, %{timeout: timeout, action: action, backlog: backlog} = state) do
-    # IO.puts "trigger timeout #{timeout}"
-    action.(backlog)
+    if backlog |> Enum.count > 0 do
+      Logger.debug "flushing #{Enum.count(backlog)} commands after timeout #{timeout}"
+      action.(backlog)
+    end
+
     :erlang.send_after(timeout, __MODULE__, :trigger)
     {:noreply, %{state | backlog: []}}
   end
