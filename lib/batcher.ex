@@ -2,14 +2,14 @@ defmodule Batcher do
   use GenServer
   require Logger
 
-  def start_link(args \\ [], opts) do
+  def start_link(args \\ [], _) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
   end
 
   def init(opts) do
-#    IO.inspect opts
+    # IO.inspect opts
     state = Enum.into(opts, %{backlog: [], timeout: 1000, limit: 1000})
-#    IO.inspect state
+    # IO.inspect state
 
     :erlang.send_after(state.timeout, __MODULE__, :trigger)
 

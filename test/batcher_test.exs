@@ -8,7 +8,7 @@ defmodule BatcherTest do
 
   context "with timeout" do
     before do
-      Batcher.start_link(timeout: 100, action: fn(_) -> end)
+      Batcher.start_link([timeout: 100, action: fn(_) -> end], [])
 
       :ok
     end
@@ -26,7 +26,7 @@ defmodule BatcherTest do
   context "with limit" do
 
     before do
-      Batcher.start_link(limit: 10, action: fn(_) -> end)
+      Batcher.start_link([limit: 10, action: fn(_) -> end], [])
 
       :ok
     end
