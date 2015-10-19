@@ -30,7 +30,7 @@ defmodule Batcher do
     backlog = [ command | backlog ]
     if Enum.count(backlog) == limit do
       Logger.debug "flushing #{Enum.count(backlog)} commands after limit #{limit}"
-      action.(backlog)
+      action.(Enum.reverse(backlog))
       backlog = []
     end
     {:noreply, %{state | backlog: backlog}}
@@ -43,7 +43,7 @@ defmodule Batcher do
   def handle_info(:trigger, %{timeout: timeout, action: action, backlog: backlog} = state) do
     if backlog |> Enum.count > 0 do
       Logger.debug "flushing #{Enum.count(backlog)} commands after timeout #{timeout}"
-      action.(backlog)
+      action.(Enum.reverse(backlog))
     end
 
     :erlang.send_after(timeout, __MODULE__, :trigger)
