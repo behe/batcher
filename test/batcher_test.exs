@@ -16,8 +16,9 @@ defmodule BatcherTest do
 
     it "performs the action directly" do
       Batcher.perform BatcherTest.command(1)
-      assert_received {:backlog, backlog}
       expect(Batcher.backlog) |> to_eq []
+      assert_received {:backlog, backlog}
+      expect(backlog) |> to_eq [BatcherTest.command(1)]
     end
   end
 
