@@ -6,6 +6,21 @@ defmodule BatcherTest do
     ~w(LPUSH key#{i} value#{i})
   end
 
+  context "without batching" do
+    before do
+      test = self
+      Batcher.start_link([action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+
+      :ok
+    end
+
+    it "performs the action directly" do
+      Batcher.perform BatcherTest.command(1)
+      assert_received {:backlog, backlog}
+      expect(Batcher.backlog) |> to_eq []
+    end
+  end
+
   context "with timeout" do
     before do
       test = self
