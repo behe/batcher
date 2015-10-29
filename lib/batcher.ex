@@ -49,7 +49,7 @@ defmodule Batcher do
     {:noreply, %{state | backlog: []}}
   end
 
-  defp apply_action(action, backlog, reason \\ "") do
+  defp apply_action(action, backlog, reason) do
     case backlog |> Enum.count do
       0 ->
         backlog
