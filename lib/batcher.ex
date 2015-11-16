@@ -7,11 +7,9 @@ defmodule Batcher do
   end
 
   def init(opts) do
-    state = Enum.into(opts, %{backlog: [], timeout: 1000, limit: 1000})
-
-    :erlang.send_after(state.timeout, __MODULE__, :trigger)
-
-    {:ok, state}
+    state = Enum.into(opts, %{backlog: [], timeout: 1000, limit: 1000, timer: nil})
+    timer = :erlang.send_after(state.timeout, __MODULE__, :trigger)
+    {:ok, %{state | timer: timer}}
   end
 
   def append(command) do
@@ -34,12 +32,9 @@ defmodule Batcher do
     {:reply, Enum.reverse(backlog), state}
   end
 
-  def handle_cast({:append, command}, %{limit: limit, backlog: backlog, action: action} = state) do
+  def handle_cast({:append, command}, %{limit: limit, backlog: backlog, action: action, timer: timer, timeout: timeout} = state) do
     backlog = [ command | backlog ]
-    if Enum.count(backlog) == limit do
-      backlog = apply_action(action, backlog, "limit")
-    end
-    {:noreply, %{state | backlog: backlog}}
+    {:noreply, %{state | backlog: limit_backlog(backlog, limit, action, timer, timeout)}}
   end
 
   def handle_info(:trigger, %{timeout: timeout, action: action, backlog: backlog} = state) do
@@ -47,6 +42,17 @@ defmodule Batcher do
 
     :erlang.send_after(timeout, __MODULE__, :trigger)
     {:noreply, %{state | backlog: []}}
+  end
+
+  defp limit_backlog(backlog, limit, action, timer, timeout) do
+    case backlog |> Enum.count do
+      ^limit ->
+        :erlang.cancel_timer(timer)
+        :erlang.send_after(timeout, __MODULE__, :trigger)
+        apply_action(action, backlog, "limit")
+      _ ->
+        backlog
+    end
   end
 
   defp apply_action(action, backlog, reason) do
