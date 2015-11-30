@@ -61,4 +61,60 @@ defmodule BatcherTest do
       expect(backlog) |> to_eq (1..10 |> Enum.map(fn(i) -> BatcherTest.command(i) end))
     end
   end
+
+  context "GenServer timeout" do
+    before :each do
+      test = self
+      {:ok, pid} = GenServer.start_link(Batcher,
+        [timeout: 100,
+        action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+      {:ok, pid: pid}
+    end
+
+    it "applies timeout", context do
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(1)})
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(2)})
+      expect(GenServer.call(context[:pid], :backlog) |> Enum.count) |> to_eq 2
+
+      assert_receive {:backlog, backlog}, 200
+      expect(backlog) |> to_eq [BatcherTest.command(1), BatcherTest.command(2)]
+      expect(GenServer.call(context[:pid], :backlog)) |> to_eq []
+    end
+
+    it "handles triggers", context do
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(1)})
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(2)})
+      expect(GenServer.call(context[:pid], :backlog) |> Enum.count) |> to_eq 2
+
+      assert_receive {:backlog, backlog}, 200
+      expect(backlog) |> to_eq [BatcherTest.command(1), BatcherTest.command(2)]
+      expect(GenServer.call(context[:pid], :backlog)) |> to_eq []
+
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(1)})
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(2)})
+      expect(GenServer.call(context[:pid], :backlog) |> Enum.count) |> to_eq 2
+
+      assert_receive {:backlog, backlog}, 200
+    end
+  end
+
+  context "GenServer limit and timeout" do
+    before :each do
+      test = self
+      {:ok, pid} = GenServer.start_link(Batcher,
+        [limit: 2,
+         timeout: 200,
+         action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+      {:ok, pid: pid}
+    end
+
+    it "handles batching", context do
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(1)})
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(2)})
+      assert_receive {:backlog, _backlog}, 100 # triggered by limit
+
+      GenServer.cast(context[:pid], {:append, BatcherTest.command(3)})
+      assert_receive {:backlog, _backlog}, 300 # triggered by timeout
+    end
+  end
 end

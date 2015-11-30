@@ -8,20 +8,38 @@ defmodule Batcher do
 
   def init(opts) do
     state = Enum.into(opts, %{backlog: [], timeout: 1000, limit: 1000, timer: nil})
-    timer = :erlang.send_after(state.timeout, __MODULE__, :trigger)
+    timer = :erlang.send_after(state.timeout, self, :trigger)
     {:ok, %{state | timer: timer}}
   end
 
+  @doc "Same as `append/2` but defaults to __MODULE__ for `batcher`"
   def append(command) do
-    GenServer.cast(__MODULE__, {:append, command})
+    append(__MODULE__, command)
   end
 
+  @doc "Appends an item to the `batcher` (pid or atom)"
+  def append(batcher, command) do
+    GenServer.cast(batcher, {:append, command})
+  end
+
+  @doc "Same as `perform/2` but defaults to __MODULE__ for `batcher`"
   def perform(command) do
-    GenServer.call(__MODULE__, {:perform, command})
+    perform(__MODULE__, command)
   end
 
+  @doc "Applies the action immediately to the `command` by the `batcher`"
+  def perform(batcher, command) do
+    GenServer.call(batcher, {:perform, command})
+  end
+
+  @doc "Same as `backlog/1` but defaults to __MODULE__ for `batcher`"
   def backlog do
-    GenServer.call(__MODULE__, :backlog)
+    backlog(__MODULE__)
+  end
+
+  @doc "Retrieves the items in the backlog of the `batcher`"
+  def backlog(batcher) do
+    GenServer.call(batcher, :backlog)
   end
 
   def handle_call({:perform, command}, _, %{action: action} = state) do
@@ -40,15 +58,15 @@ defmodule Batcher do
   def handle_info(:trigger, %{timeout: timeout, action: action, backlog: backlog} = state) do
     apply_action(action, backlog, "timeout")
 
-    :erlang.send_after(timeout, __MODULE__, :trigger)
-    {:noreply, %{state | backlog: []}}
+    timer = :erlang.send_after(timeout, self, :trigger)
+    {:noreply, %{state | backlog: [], timer: timer}}
   end
 
   defp limit_backlog(backlog, limit, action, timer, timeout) do
     case backlog |> Enum.count do
       ^limit ->
         :erlang.cancel_timer(timer)
-        :erlang.send_after(timeout, __MODULE__, :trigger)
+        :erlang.send_after(timeout, self, :trigger)
         apply_action(action, backlog, "limit")
       _ ->
         backlog
