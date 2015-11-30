@@ -12,33 +12,18 @@ defmodule Batcher do
     {:ok, %{state | timer: timer}}
   end
 
-  @doc "Same as `append/2` but defaults to __MODULE__ for `batcher`"
-  def append(command) do
-    append(__MODULE__, command)
-  end
-
   @doc "Appends an item to the `batcher` (pid or atom)"
-  def append(batcher, command) do
+  def append(command, batcher \\ __MODULE__) do
     GenServer.cast(batcher, {:append, command})
   end
 
-  @doc "Same as `perform/2` but defaults to __MODULE__ for `batcher`"
-  def perform(command) do
-    perform(__MODULE__, command)
-  end
-
   @doc "Applies the action immediately to the `command` by the `batcher`"
-  def perform(batcher, command) do
+  def perform(command, batcher \\ __MODULE__) do
     GenServer.call(batcher, {:perform, command})
   end
 
-  @doc "Same as `backlog/1` but defaults to __MODULE__ for `batcher`"
-  def backlog do
-    backlog(__MODULE__)
-  end
-
   @doc "Retrieves the items in the backlog of the `batcher`"
-  def backlog(batcher) do
+  def backlog(batcher \\ __MODULE__) do
     GenServer.call(batcher, :backlog)
   end
 
