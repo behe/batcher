@@ -25,3 +25,6 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 
   The configured action will receive the batched list of things sent to it until the
   timeout or limit has triggered the action.
+
+  To add items to the batcher call `Batcher.append(myitem)`
+

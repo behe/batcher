@@ -2,26 +2,29 @@ defmodule Batcher do
   use GenServer
   require Logger
 
-  def start_link(args \\ [], _) do
-    GenServer.start_link(__MODULE__, args, name: __MODULE__)
+  def start_link(args \\ [], name \\ __MODULE__) do
+    GenServer.start_link(__MODULE__, args, name: name)
   end
 
   def init(opts) do
     state = Enum.into(opts, %{backlog: [], timeout: 1000, limit: 1000, timer: nil})
-    timer = :erlang.send_after(state.timeout, __MODULE__, :trigger)
+    timer = :erlang.send_after(state.timeout, self, :trigger)
     {:ok, %{state | timer: timer}}
   end
 
-  def append(command) do
-    GenServer.cast(__MODULE__, {:append, command})
+  @doc "Appends an item to the `batcher` (pid or atom)"
+  def append(command, batcher \\ __MODULE__) do
+    GenServer.cast(batcher, {:append, command})
   end
 
-  def perform(command) do
-    GenServer.call(__MODULE__, {:perform, command})
+  @doc "Applies the action immediately to the `command` by the `batcher`"
+  def perform(command, batcher \\ __MODULE__) do
+    GenServer.call(batcher, {:perform, command})
   end
 
-  def backlog do
-    GenServer.call(__MODULE__, :backlog)
+  @doc "Retrieves the items in the backlog of the `batcher`"
+  def backlog(batcher \\ __MODULE__) do
+    GenServer.call(batcher, :backlog)
   end
 
   def handle_call({:perform, command}, _, %{action: action} = state) do
@@ -40,15 +43,15 @@ defmodule Batcher do
   def handle_info(:trigger, %{timeout: timeout, action: action, backlog: backlog} = state) do
     apply_action(action, backlog, "timeout")
 
-    :erlang.send_after(timeout, __MODULE__, :trigger)
-    {:noreply, %{state | backlog: []}}
+    timer = :erlang.send_after(timeout, self, :trigger)
+    {:noreply, %{state | backlog: [], timer: timer}}
   end
 
   defp limit_backlog(backlog, limit, action, timer, timeout) do
     case backlog |> Enum.count do
       ^limit ->
         :erlang.cancel_timer(timer)
-        :erlang.send_after(timeout, __MODULE__, :trigger)
+        :erlang.send_after(timeout, self, :trigger)
         apply_action(action, backlog, "limit")
       _ ->
         backlog
