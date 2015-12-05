@@ -9,7 +9,7 @@ defmodule BatcherTest do
   context "without batching" do
     before do
       test = self
-      Batcher.start_link([action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+      Batcher.start_link([action: fn(backlog) -> send(test, {:backlog, backlog}) end])
 
       :ok
     end
@@ -25,7 +25,7 @@ defmodule BatcherTest do
   context "with timeout" do
     before do
       test = self
-      Batcher.start_link([timeout: 100, action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+      Batcher.start_link([timeout: 100, action: fn(backlog) -> send(test, {:backlog, backlog}) end])
 
       :ok
     end
@@ -44,7 +44,7 @@ defmodule BatcherTest do
   context "with limit" do
     before do
       test = self
-      Batcher.start_link([limit: 10, action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+      Batcher.start_link([limit: 10, action: fn(backlog) -> send(test, {:backlog, backlog}) end])
 
       :ok
     end
@@ -67,14 +67,16 @@ defmodule BatcherTest do
       test = self
       {:ok, pid} = GenServer.start_link(Batcher,
         [timeout: 100,
-        action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+        action: fn(backlog) -> send(test, {:backlog, backlog}) end])
       {:ok, pid: pid}
     end
 
     it "applies timeout", context do
       GenServer.cast(context[:pid], {:append, BatcherTest.command(1)})
       GenServer.cast(context[:pid], {:append, BatcherTest.command(2)})
-      expect(GenServer.call(context[:pid], :backlog) |> Enum.count) |> to_eq 2
+
+      expect(GenServer.call(context[:pid], :backlog)
+      |> Enum.count) |> to_eq 2
 
       assert_receive {:backlog, backlog}, 200
       expect(backlog) |> to_eq [BatcherTest.command(1), BatcherTest.command(2)]
@@ -92,9 +94,11 @@ defmodule BatcherTest do
 
       GenServer.cast(context[:pid], {:append, BatcherTest.command(1)})
       GenServer.cast(context[:pid], {:append, BatcherTest.command(2)})
-      expect(GenServer.call(context[:pid], :backlog) |> Enum.count) |> to_eq 2
 
-      assert_receive {:backlog, backlog}, 200
+      expect(GenServer.call(context[:pid], :backlog)
+      |> Enum.count) |> to_eq 2
+
+      assert_receive {:backlog, _backlog}, 200
     end
   end
 
@@ -104,7 +108,7 @@ defmodule BatcherTest do
       {:ok, pid} = GenServer.start_link(Batcher,
         [limit: 2,
          timeout: 200,
-         action: fn(backlog) -> send(test, {:backlog, backlog}) end], [])
+         action: fn(backlog) -> send(test, {:backlog, backlog}) end])
       {:ok, pid: pid}
     end
 
@@ -115,6 +119,56 @@ defmodule BatcherTest do
 
       GenServer.cast(context[:pid], {:append, BatcherTest.command(3)})
       assert_receive {:backlog, _backlog}, 300 # triggered by timeout
+    end
+  end
+
+  context "Multiple Batchers" do
+    before :each do
+      test = self
+      {:ok, p_limit} = Batcher.start_link([limit: 2,
+        action: fn(backlog) -> send(test, {:limit, backlog}) end], :limit)
+      {:ok, p_timeout} = Batcher.start_link([timeout: 100,
+        action: fn(backlog) -> send(test, {:timeout, backlog}) end], :timeout)
+      {:ok, p_both} = Batcher.start_link([timeout: 10000, limit: 2,
+        action: fn(backlog) -> send(test, {:both, backlog}) end], :both)
+
+      {:ok, batchers: %{limit: p_limit, timeout: p_timeout, both: p_both}}
+    end
+
+    it "handles limit", context do
+      Batcher.append(BatcherTest.command(1), context[:batchers][:limit])
+
+      expect(Batcher.backlog(context[:batchers][:limit])
+      |> Enum.count) |> to_eq 1
+
+      Batcher.append(BatcherTest.command(2), context[:batchers][:limit])
+
+      expect(Batcher.backlog(context[:batchers][:limit])) |> to_eq []
+      assert_received {:limit, _backlog}
+    end
+
+    it "handles timeout", context do
+      Batcher.append(BatcherTest.command(1), context[:batchers][:timeout])
+      Batcher.append(BatcherTest.command(2), context[:batchers][:timeout])
+
+      expect(Batcher.backlog(context[:batchers][:timeout]))
+      |> to_eq [BatcherTest.command(1), BatcherTest.command(2)]
+
+      assert_receive {:timeout, _backlog}, 200
+    end
+
+    it "handles both", context do
+      Batcher.append(BatcherTest.command(1), context[:batchers][:limit])
+      Batcher.append(BatcherTest.command(2), context[:batchers][:limit])
+
+      Batcher.append(BatcherTest.command(3), context[:batchers][:both])
+      Batcher.append(BatcherTest.command(4), context[:batchers][:both])
+
+      Batcher.append(BatcherTest.command(5), context[:batchers][:timeout])
+
+      assert_receive {:limit, _backlog}, 100
+      assert_receive {:both, _backlog}, 100
+      assert_receive {:timeout, _backlog}, 200
     end
   end
 end

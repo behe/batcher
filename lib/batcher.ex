@@ -2,8 +2,8 @@ defmodule Batcher do
   use GenServer
   require Logger
 
-  def start_link(args \\ [], _) do
-    GenServer.start_link(__MODULE__, args, name: __MODULE__)
+  def start_link(args \\ [], name \\ __MODULE__) do
+    GenServer.start_link(__MODULE__, args, name: name)
   end
 
   def init(opts) do
